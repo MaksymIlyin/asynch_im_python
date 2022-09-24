@@ -1,5 +1,8 @@
 import socket
+from select import select
 
+
+to_monitor = []
 
 host = "localhost"
 port = 5000
@@ -9,26 +12,35 @@ server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server_socket.bind((host, port))
 server_socket.listen()
 
+
 def accept_connection(server_socket):
-    while True:
-        client_socket, addr = server_socket.accept()
-        print("Connection from", addr)
-        send_message(client_socket)
+    client_socket, addr = server_socket.accept()
+    print("Connection from", addr)
+    to_monitor.append(client_socket)
 
 
 def send_message(client_socket):
+    request = client_socket.recv(4096).decode()
+
+    if request:
+        response = f"Revert <<< {request[::-1]}".encode()
+        client_socket.send(response)
+    else:
+        client_socket.close()
+
+
+def event_loop():
     while True:
-        request = client_socket.recv(4096).decode()
 
-        if not request:
-            break
-        else:
-            print("Client:", request)
-            response = f"Revelt <<< {request[::-1]}".encode()
-            client_socket.send(response)
+        ready_to_read, _, _ = select(to_monitor, [], []) # read, write, errors
 
-    client_socket.close()
+        for sock in ready_to_read:
+            if sock is server_socket:
+                accept_connection(sock)
+            else:
+                send_message(sock)
 
 
 if __name__ == "__main__":
-    accept_connection(server_socket)
+    to_monitor.append(server_socket)
+    event_loop()
